@@ -2,7 +2,7 @@
 
 import http from 'http';
 import { readFile } from 'fs/promises';
-import { createReadStream, existsSync } from 'fs';
+import { createReadStream, existsSync, statSync } from 'fs';
 import { extname, join, normalize, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { evaluate, getAiConfig, DEFAULT_MODELS } from './ai.mjs';
@@ -99,7 +99,7 @@ function sendStaticFile(req, res) {
   requested = requested.split('?')[0];
   const safePath = normalize(requested).replace(/^(\.\.[/\\])+/, '');
   const filePath = join(publicDir, safePath);
-  if (!filePath.startsWith(publicDir) || !existsSync(filePath)) {
+  if (!filePath.startsWith(publicDir) || !existsSync(filePath) || statSync(filePath).isDirectory()) {
     res.writeHead(404);
     res.end('Not found');
     return;
