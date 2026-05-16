@@ -87,6 +87,7 @@ async function buildSystemPrompt() {
   ]);
   // CV is passed in the request body from localStorage
   return [
+    '**LANGUAGE RULE: Your instructions below may be in Spanish — that is intentional (original system language). However, always write your evaluation output in English.**',
     shared && `# Shared Context\n${shared}`,
     oferta && `# Evaluation Mode\n${oferta}`,
   ].filter(Boolean).join('\n\n---\n\n');
