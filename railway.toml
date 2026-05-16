@@ -1,0 +1,17 @@
+[build]
+builder = "dockerfile"
+
+[deploy]
+startCommand = "node gui/server.mjs"
+
+[[volumes]]
+mountPath = "/app/data"
+
+[[volumes]]
+mountPath = "/app/reports"
+
+[[volumes]]
+mountPath = "/app/output"
+
+[[volumes]]
+mountPath = "/app/config"
