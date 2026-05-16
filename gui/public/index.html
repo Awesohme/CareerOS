@@ -92,6 +92,7 @@
         </div>
         <nav class="nav">
           <button class="nav-btn active" data-view="overview">Overview</button>
+          <button class="nav-btn" data-view="scan">Scan Jobs <span id="scan-badge" class="nav-badge hidden"></span></button>
           <button class="nav-btn" data-view="evaluate">Evaluate a Role</button>
           <button class="nav-btn" data-view="applications">Applications</button>
           <button class="nav-btn" data-view="editor">CV &amp; Profile</button>
@@ -114,6 +115,46 @@
             <h2 id="hero-heading">Your search, under control.</h2>
           </div>
           <button id="refresh-all" class="primary-btn">Refresh</button>
+        </section>
+
+        <!-- Scan -->
+        <section id="view-scan" class="view">
+          <div class="panel scan-controls-panel">
+            <div class="panel-head stack-mobile">
+              <h3>Job Board Scanner</h3>
+              <span id="scan-last" class="muted small"></span>
+            </div>
+            <p class="muted">Scan 45+ company career pages for new roles matching your profile. Greenhouse companies are instant; others are extracted via AI.</p>
+            <div class="scan-actions">
+              <button id="scan-btn" class="primary-btn">Scan now</button>
+              <button id="scan-greenhouse-btn" class="ghost-btn">Greenhouse only</button>
+              <div class="scan-interval-wrap">
+                <label class="muted small">Auto-scan:</label>
+                <select id="scan-interval">
+                  <option value="">Off</option>
+                  <option value="7200000">Every 2h</option>
+                  <option value="21600000">Every 6h</option>
+                  <option value="43200000">Every 12h</option>
+                </select>
+              </div>
+            </div>
+            <div id="scan-progress" class="scan-progress hidden"></div>
+          </div>
+
+          <div id="scan-results-panel" class="hidden">
+            <div id="scan-new-section" class="hidden">
+              <div class="scan-section-head">New jobs <span id="scan-new-count" class="count-pill"></span></div>
+              <div id="scan-new-list" class="scan-list"></div>
+            </div>
+            <div id="scan-pipeline-section" class="hidden">
+              <div class="scan-section-head">In your pipeline <span id="scan-pipeline-count" class="count-pill"></span></div>
+              <div id="scan-pipeline-list" class="scan-list"></div>
+            </div>
+            <div id="scan-errors-section" class="hidden">
+              <div class="scan-section-head muted">Failed to scan <span id="scan-errors-count" class="count-pill count-pill-warn"></span></div>
+              <div id="scan-errors-list" class="scan-list scan-list-errors"></div>
+            </div>
+          </div>
         </section>
 
         <!-- Overview -->

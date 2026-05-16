@@ -5,6 +5,10 @@ const LS = {
   cv: 'co:cv',
   applications: 'co:applications',
   reports: 'co:reports',
+  seenJobs: 'co:seen-jobs',
+  pipeline: 'co:pipeline',
+  scanInterval: 'co:scan-interval',
+  lastScan: 'co:last-scan',
 };
 
 function lsGet(key, fallback = null) {
@@ -362,6 +366,165 @@ function importData(file) {
   reader.readAsText(file);
 }
 
+// ── Scan ──────────────────────────────────────────────────────────────────────
+
+function getSeenJobs() {
+  return new Set(lsGet(LS.seenJobs, []));
+}
+function saveSeenJobs(set) {
+  lsSet(LS.seenJobs, [...set]);
+}
+function getPipeline() {
+  return lsGet(LS.pipeline, []);
+}
+
+function jobCard(job, type) {
+  const loc = job.location || 'Remote';
+  const actions = type === 'new'
+    ? `<div class="job-actions">
+         <button class="primary-btn small-btn" onclick="evaluateJob('${encodeURIComponent(job.url)}')">Evaluate</button>
+         <button class="ghost-btn small-btn" onclick="skipJob('${encodeURIComponent(job.url)}')">Skip</button>
+         <button class="ghost-btn small-btn" onclick="addToPipeline(${encodeURIComponent(JSON.stringify(job))})">+ Pipeline</button>
+       </div>`
+    : '';
+  return `<div class="job-card">
+    <div class="job-meta">
+      <strong class="job-company">${job.company}</strong>
+      <span class="job-title"><a href="${job.url}" target="_blank" rel="noopener">${job.title}</a></span>
+      <span class="job-loc muted small">${loc}</span>
+    </div>
+    ${actions}
+  </div>`;
+}
+
+function renderScanResults(data) {
+  const seen = getSeenJobs();
+  const pipeline = getPipeline();
+  const pipelineUrls = new Set(pipeline.map((j) => j.url));
+
+  const newJobs = data.jobs.filter((j) => !seen.has(j.url));
+  const pipelineJobs = data.jobs.filter((j) => pipelineUrls.has(j.url));
+
+  const panel = document.getElementById('scan-results-panel');
+  panel.classList.remove('hidden');
+
+  const newSection = document.getElementById('scan-new-section');
+  const pipeSection = document.getElementById('scan-pipeline-section');
+  const errSection = document.getElementById('scan-errors-section');
+
+  if (newJobs.length) {
+    newSection.classList.remove('hidden');
+    document.getElementById('scan-new-count').textContent = newJobs.length;
+    document.getElementById('scan-new-list').innerHTML = newJobs.map((j) => jobCard(j, 'new')).join('');
+  } else {
+    newSection.classList.add('hidden');
+  }
+
+  if (pipelineJobs.length) {
+    pipeSection.classList.remove('hidden');
+    document.getElementById('scan-pipeline-count').textContent = pipelineJobs.length;
+    document.getElementById('scan-pipeline-list').innerHTML = pipelineJobs.map((j) => jobCard(j, 'pipeline')).join('');
+  } else {
+    pipeSection.classList.add('hidden');
+  }
+
+  const errors = data.errors || [];
+  if (errors.length) {
+    errSection.classList.remove('hidden');
+    document.getElementById('scan-errors-count').textContent = errors.length;
+    document.getElementById('scan-errors-list').innerHTML = errors
+      .map((e) => `<div class="job-card error-card"><span class="job-company">${e.company}</span> <span class="muted small">${e.reason}</span></div>`)
+      .join('');
+  } else {
+    errSection.classList.add('hidden');
+  }
+
+  const badge = document.getElementById('scan-badge');
+  if (newJobs.length) {
+    badge.textContent = newJobs.length;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+
+  lsSet(LS.lastScan, data);
+}
+
+async function runScan(mode) {
+  const btn = document.getElementById('scan-btn');
+  const ghBtn = document.getElementById('scan-greenhouse-btn');
+  const progress = document.getElementById('scan-progress');
+
+  btn.disabled = true;
+  ghBtn.disabled = true;
+  progress.classList.remove('hidden');
+  progress.textContent = mode === 'greenhouse' ? 'Scanning Greenhouse companies…' : 'Scanning all companies (this may take a minute)…';
+
+  try {
+    const data = await api('/api/scan', { method: 'POST', body: JSON.stringify({ mode }) });
+    renderScanResults(data);
+    const ts = new Date(data.scannedAt).toLocaleTimeString();
+    document.getElementById('scan-last').textContent = `Last scan: ${ts} · ${data.companiesScanned} companies`;
+    progress.textContent = `Done — ${data.jobs.length} jobs found${data.cached ? ' (cached)' : ''}.`;
+  } catch (e) {
+    progress.textContent = `Error: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    ghBtn.disabled = false;
+  }
+}
+
+window.evaluateJob = function(encodedUrl) {
+  const url = decodeURIComponent(encodedUrl);
+  setView('evaluate');
+  document.getElementById('eval-input').value = url;
+};
+
+window.skipJob = function(encodedUrl) {
+  const url = decodeURIComponent(encodedUrl);
+  const seen = getSeenJobs();
+  seen.add(url);
+  saveSeenJobs(seen);
+  const card = document.querySelector(`[onclick*="${encodedUrl}"]`)?.closest('.job-card');
+  if (card) card.remove();
+  const badge = document.getElementById('scan-badge');
+  const remaining = document.querySelectorAll('#scan-new-list .job-card').length;
+  if (!remaining) { document.getElementById('scan-new-section').classList.add('hidden'); badge.classList.add('hidden'); }
+  else badge.textContent = remaining;
+};
+
+window.addToPipeline = function(encodedJob) {
+  const job = JSON.parse(decodeURIComponent(encodedJob));
+  const pipeline = getPipeline();
+  if (!pipeline.find((j) => j.url === job.url)) {
+    pipeline.push({ ...job, addedAt: new Date().toISOString() });
+    lsSet(LS.pipeline, pipeline);
+  }
+  const seen = getSeenJobs();
+  seen.add(job.url);
+  saveSeenJobs(seen);
+  const card = document.querySelector(`[onclick*="${encodeURIComponent(job.url)}"]`)?.closest('.job-card');
+  if (card) { card.querySelector('.job-actions').innerHTML = '<span class="muted small">Added to pipeline ✓</span>'; }
+};
+
+function initAutoScan() {
+  const sel = document.getElementById('scan-interval');
+  const stored = lsGet(LS.scanInterval);
+  if (stored) sel.value = stored;
+
+  sel.addEventListener('change', () => {
+    const val = sel.value;
+    if (val) { lsSet(LS.scanInterval, val); } else { localStorage.removeItem(LS.scanInterval); }
+  });
+
+  if (stored) {
+    setInterval(() => runScan('all'), Number(stored));
+  }
+
+  const cached = lsGet(LS.lastScan);
+  if (cached) renderScanResults(cached);
+}
+
 // ── Apply profile to UI ───────────────────────────────────────────────────────
 
 function applyProfile() {
@@ -405,6 +568,10 @@ function boot() {
   document.querySelectorAll('.mini-btn').forEach((b) => b.addEventListener('click', () => loadEditor(b.dataset.file)));
   document.getElementById('save-file').addEventListener('click', saveEditor);
   document.getElementById('app-search').addEventListener('input', (e) => renderApplications(e.target.value.trim().toLowerCase()));
+
+  document.getElementById('scan-btn').addEventListener('click', () => runScan('all'));
+  document.getElementById('scan-greenhouse-btn').addEventListener('click', () => runScan('greenhouse'));
+  initAutoScan();
 
   document.getElementById('eval-btn').addEventListener('click', runEvaluation);
   document.getElementById('save-report-btn').addEventListener('click', saveEvalReport);

@@ -6,6 +6,8 @@ import { createReadStream, existsSync } from 'fs';
 import { extname, join, normalize, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { evaluate, getAiConfig, DEFAULT_MODELS } from './ai.mjs';
+import { scanGreenhouse, scanWithAI } from './scan.mjs';
+import yaml from 'js-yaml';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
@@ -13,6 +15,25 @@ const publicDir = join(__dirname, 'public');
 const port = Number(process.env.PORT || 7860);
 const host = '0.0.0.0';
 const authPassword = process.env.AUTH_PASSWORD || '';
+
+// ── Scan cache ────────────────────────────────────────────────────────────────
+
+let scanCache = null; // { jobs, errors, scannedAt, companiesScanned }
+const SCAN_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function loadPortalsConfig() {
+  const paths = [
+    join(root, 'portals.yml'),
+    join(root, 'templates', 'portals.example.yml'),
+  ];
+  for (const p of paths) {
+    try {
+      const raw = await readFile(p, 'utf8');
+      return yaml.load(raw);
+    } catch { /* try next */ }
+  }
+  return { tracked_companies: [], title_filter: {} };
+}
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -103,6 +124,68 @@ const server = http.createServer(async (req, res) => {
         configured: !!(provider && process.env.AI_API_KEY),
         defaultModels: DEFAULT_MODELS,
       });
+    }
+
+    // Portals config (company list + filters)
+    if (req.method === 'GET' && req.url === '/api/portals') {
+      const config = await loadPortalsConfig();
+      const companies = (config.tracked_companies || []).map((c) => ({
+        name: c.name,
+        careers_url: c.careers_url,
+        api: c.api || null,
+        enabled: c.enabled !== false,
+        scan_method: c.api ? 'greenhouse' : 'ai',
+      }));
+      return json(res, 200, {
+        companies,
+        filters: config.title_filter || {},
+      });
+    }
+
+    // Scan status (cached result only, no new scan)
+    if (req.method === 'GET' && req.url === '/api/scan/status') {
+      return json(res, 200, scanCache || { jobs: [], errors: [], scannedAt: null, companiesScanned: 0 });
+    }
+
+    // Run scan
+    if (req.method === 'POST' && req.url.startsWith('/api/scan')) {
+      const { provider } = getAiConfig();
+      if (scanCache && (Date.now() - new Date(scanCache.scannedAt).getTime() < SCAN_CACHE_TTL_MS)) {
+        return json(res, 200, { ...scanCache, cached: true });
+      }
+
+      const config = await loadPortalsConfig();
+      const companies = (config.tracked_companies || []).filter((c) => c.enabled !== false);
+      const filters = config.title_filter || {};
+      const body = await readBody(req).catch(() => ({}));
+      const mode = body.mode || 'all';
+
+      let allJobs = [];
+      let allErrors = [];
+
+      if (mode !== 'ai') {
+        const { jobs, errors } = await scanGreenhouse(companies, filters);
+        allJobs.push(...jobs);
+        allErrors.push(...errors);
+      }
+
+      if (mode !== 'greenhouse') {
+        if (!provider || !process.env.AI_API_KEY) {
+          allErrors.push({ company: 'AI scan', reason: 'AI provider not configured' });
+        } else {
+          const { jobs, errors } = await scanWithAI(companies, filters);
+          allJobs.push(...jobs);
+          allErrors.push(...errors);
+        }
+      }
+
+      scanCache = {
+        jobs: allJobs,
+        errors: allErrors,
+        scannedAt: new Date().toISOString(),
+        companiesScanned: companies.length,
+      };
+      return json(res, 200, { ...scanCache, cached: false });
     }
 
     // Evaluate a job description

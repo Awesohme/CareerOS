@@ -27,6 +27,7 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
+    "js-yaml": "^4.1.1",
     "openai": "^6.38.0",
     "playwright": "^1.58.1"
   }
