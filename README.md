@@ -1,3 +1,13 @@
+---
+title: Career OS
+emoji: 💼
+colorFrom: orange
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Career-Ops
 
 **[:gb: English](#what-is-this)** | **[:es: Español](#es-versión-en-español)**

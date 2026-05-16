@@ -1,14 +1,24 @@
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Storage keys ──────────────────────────────────────────────────────────────
 
-const DEFAULT_MODELS = {
-  anthropic: 'claude-sonnet-4-6',
-  openai: 'gpt-4o',
-  deepseek: 'deepseek-chat',
-  gemini: 'gemini-2.0-flash',
-  qwen: 'qwen-plus',
-  kimi: 'moonshot-v1-8k',
-  custom: '',
+const LS = {
+  profile: 'co:profile',
+  cv: 'co:cv',
+  applications: 'co:applications',
+  reports: 'co:reports',
 };
+
+function lsGet(key, fallback = null) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch { return fallback; }
+}
+
+function lsSet(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+// ── Status / score helpers ────────────────────────────────────────────────────
 
 const STATUS_COLORS = {
   Interview: 'status-green',
@@ -21,31 +31,30 @@ const STATUS_COLORS = {
   SKIP: 'status-grey',
 };
 
-// ── State ─────────────────────────────────────────────────────────────────────
+function scoreBadge(score) {
+  if (score == null) return 'N/A';
+  const display = `${score}/5`;
+  const cls = score >= 4 ? 'score-high' : score >= 3 ? 'score-mid' : 'score-low';
+  return `<span class="score-badge ${cls}">${display}</span>`;
+}
+
+// ── App state ─────────────────────────────────────────────────────────────────
 
 const state = {
-  apps: [],
-  filteredApps: [],
-  summary: null,
-  context: null,
-  currentFile: 'cv',
-  reports: [],
-  setupStatus: null,
+  aiConfig: null,
   evalResult: '',
+  currentEditorKey: 'cv',
 };
 
-// ── API ───────────────────────────────────────────────────────────────────────
+// ── API helper (only for server calls) ───────────────────────────────────────
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({ error: 'Request failed' }));
+  const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({ error: 'Request failed' }));
     throw new Error(payload.error || 'Request failed');
   }
-  return response.json();
+  return res.json();
 }
 
 // ── Views ─────────────────────────────────────────────────────────────────────
@@ -62,7 +71,6 @@ function openSidebar() {
   document.getElementById('sidebar').classList.add('open');
   document.getElementById('sidebar-backdrop').classList.add('visible');
 }
-
 function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebar-backdrop').classList.remove('visible');
@@ -71,7 +79,7 @@ function closeSidebar() {
 // ── Onboarding ────────────────────────────────────────────────────────────────
 
 let currentStep = 1;
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 3;
 
 function showStep(step) {
   currentStep = step;
@@ -97,89 +105,47 @@ function showStep(step) {
 
 function validateStep(step) {
   if (step === 1) {
-    const name = document.getElementById('ob-name').value.trim();
-    const email = document.getElementById('ob-email').value.trim();
-    const roles = document.getElementById('ob-roles').value.trim();
-    if (!name) return 'Please enter your full name.';
-    if (!email) return 'Please enter your email.';
-    if (!roles) return 'Please enter at least one target role.';
+    if (!document.getElementById('ob-name').value.trim()) return 'Please enter your full name.';
+    if (!document.getElementById('ob-email').value.trim()) return 'Please enter your email.';
+    if (!document.getElementById('ob-roles').value.trim()) return 'Please enter at least one target role.';
   }
   if (step === 2) {
-    const key = document.getElementById('ob-apikey').value.trim();
-    const provider = document.getElementById('ob-provider').value;
-    if (!key) return 'Please enter your API key.';
-    if (provider === 'custom' && !document.getElementById('ob-baseurl').value.trim()) {
-      return 'Please enter the base URL for your custom provider.';
-    }
-  }
-  if (step === 3) {
-    const cv = document.getElementById('ob-cv').value.trim();
-    if (!cv) return 'Please paste your CV.';
+    if (!document.getElementById('ob-cv').value.trim()) return 'Please paste your CV.';
   }
   return null;
 }
 
-async function submitOnboarding() {
-  const body = {
+function submitOnboarding() {
+  const profile = {
     name: document.getElementById('ob-name').value.trim(),
     email: document.getElementById('ob-email').value.trim(),
     location: document.getElementById('ob-location').value.trim(),
     linkedin: document.getElementById('ob-linkedin').value.trim(),
     targetRoles: document.getElementById('ob-roles').value.trim(),
-    provider: document.getElementById('ob-provider').value,
-    apiKey: document.getElementById('ob-apikey').value.trim(),
-    model: document.getElementById('ob-model').value.trim(),
-    baseUrl: document.getElementById('ob-baseurl').value.trim(),
-    cv: document.getElementById('ob-cv').value.trim(),
   };
-  await api('/api/onboarding', { method: 'POST', body: JSON.stringify(body) });
-  const name = body.name.split(' ')[0];
-  document.getElementById('done-heading').textContent = `You're all set, ${name}!`;
-  document.getElementById('done-body').textContent =
-    `Paste any job URL or description in the Evaluate tab to get your first analysis.`;
+  lsSet(LS.profile, profile);
+  lsSet(LS.cv, document.getElementById('ob-cv').value.trim());
+  if (!lsGet(LS.applications)) lsSet(LS.applications, []);
+  if (!lsGet(LS.reports)) lsSet(LS.reports, []);
+
+  const first = profile.name.split(' ')[0];
+  document.getElementById('done-heading').textContent = `You're all set, ${first}!`;
 }
 
 function initOnboarding() {
-  const provider = document.getElementById('ob-provider');
-  const modelInput = document.getElementById('ob-model');
-  const baseUrlField = document.getElementById('ob-baseurl-field');
-
-  provider.addEventListener('change', () => {
-    const val = provider.value;
-    modelInput.placeholder = DEFAULT_MODELS[val] || '';
-    if (!modelInput.value) modelInput.value = DEFAULT_MODELS[val] || '';
-    baseUrlField.style.display = val === 'custom' ? '' : 'none';
-  });
-  // Set initial default
-  modelInput.value = DEFAULT_MODELS[provider.value] || '';
-
-  document.getElementById('ob-next').addEventListener('click', async () => {
+  document.getElementById('ob-next').addEventListener('click', () => {
     const err = validateStep(currentStep);
-    if (err) {
-      document.getElementById('ob-error').textContent = err;
-      return;
-    }
+    if (err) { document.getElementById('ob-error').textContent = err; return; }
     if (currentStep === TOTAL_STEPS - 1) {
-      const nextBtn = document.getElementById('ob-next');
-      nextBtn.textContent = 'Saving…';
-      nextBtn.disabled = true;
-      try {
-        await submitOnboarding();
-        showStep(TOTAL_STEPS);
-      } catch (e) {
-        document.getElementById('ob-error').textContent = e.message;
-        nextBtn.textContent = 'Set up →';
-        nextBtn.disabled = false;
-      }
+      submitOnboarding();
+      showStep(TOTAL_STEPS);
       return;
     }
     showStep(currentStep + 1);
   });
-
   document.getElementById('ob-back').addEventListener('click', () => {
     if (currentStep > 1) showStep(currentStep - 1);
   });
-
   document.getElementById('ob-finish').addEventListener('click', () => {
     document.getElementById('onboarding').classList.add('hidden');
     document.getElementById('app').style.display = '';
@@ -187,10 +153,24 @@ function initOnboarding() {
   });
 }
 
-// ── Metrics / Overview ────────────────────────────────────────────────────────
+// ── Overview ──────────────────────────────────────────────────────────────────
 
-function renderMetrics() {
-  const summary = state.summary || { total: 0, avgScore: null, topScore: null, pdfCount: 0, byStatus: {} };
+function computeSummary(apps) {
+  const byStatus = {};
+  let total = 0, scored = 0, totalScore = 0, topScore = 0, pdfCount = 0;
+  for (const app of apps) {
+    byStatus[app.status] = (byStatus[app.status] || 0) + 1;
+    total++;
+    if (app.score != null) { totalScore += app.score; scored++; if (app.score > topScore) topScore = app.score; }
+    if (app.hasPdf) pdfCount++;
+  }
+  return { total, avgScore: scored ? Number((totalScore / scored).toFixed(2)) : null, topScore: topScore || null, pdfCount, byStatus };
+}
+
+function renderOverview() {
+  const apps = lsGet(LS.applications, []);
+  const profile = lsGet(LS.profile, {});
+  const summary = computeSummary(apps);
 
   document.getElementById('metrics').innerHTML = [
     ['Tracked roles', summary.total],
@@ -201,151 +181,105 @@ function renderMetrics() {
     <article class="metric-card">
       <div class="label">${label}</div>
       <div class="value">${value}</div>
-    </article>
-  `).join('');
+    </article>`).join('');
 
-  const breakdown = Object.entries(summary.byStatus || {});
+  const breakdown = Object.entries(summary.byStatus);
   document.getElementById('status-breakdown').innerHTML = breakdown.length
-    ? breakdown.map(([status, count]) =>
-        `<span class="status-pill ${STATUS_COLORS[status] || 'status-grey'}">${status} · ${count}</span>`
-      ).join('')
-    : '<span class="muted">No application rows yet.</span>';
+    ? breakdown.map(([s, c]) => `<span class="status-pill ${STATUS_COLORS[s] || 'status-grey'}">${s} · ${c}</span>`).join('')
+    : '<span class="muted">No applications yet.</span>';
 
-  document.getElementById('context-files').innerHTML = Object.entries(state.context?.files || {})
-    .map(([label, path]) => `<span class="chip">${label}: <strong>${path}</strong></span>`)
-    .join('');
-}
-
-// ── Score badge ───────────────────────────────────────────────────────────────
-
-function scoreBadge(scoreRaw, score) {
-  if (score == null) return scoreRaw || 'N/A';
-  const cls = score >= 4 ? 'score-high' : score >= 3 ? 'score-mid' : 'score-low';
-  return `<span class="score-badge ${cls}">${scoreRaw}</span>`;
+  document.getElementById('context-info').innerHTML = [
+    profile.name ? `<span class="chip">Name: <strong>${profile.name}</strong></span>` : '',
+    profile.targetRoles ? `<span class="chip">Roles: <strong>${profile.targetRoles}</strong></span>` : '',
+    state.aiConfig?.provider ? `<span class="chip">AI: <strong>${state.aiConfig.provider}${state.aiConfig.model ? ' / ' + state.aiConfig.model : ''}</strong></span>` : '',
+  ].filter(Boolean).join('');
 }
 
 // ── Applications ──────────────────────────────────────────────────────────────
 
-function renderApplications() {
+function renderApplications(filter = '') {
+  const all = lsGet(LS.applications, []);
+  const apps = filter
+    ? all.filter((a) => `${a.company} ${a.role} ${a.status} ${a.notes || ''}`.toLowerCase().includes(filter))
+    : all;
+
   const tbody = document.getElementById('applications-body');
   const empty = document.getElementById('apps-empty');
-  if (state.filteredApps.length === 0) {
-    tbody.innerHTML = '';
-    empty.classList.remove('hidden');
-    return;
-  }
+  if (!apps.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); return; }
   empty.classList.add('hidden');
-  tbody.innerHTML = state.filteredApps.map((app) => `
-    <tr>
+
+  tbody.innerHTML = apps.map((app) => `
+    <tr data-id="${app.id}">
       <td>${app.number}</td>
       <td><strong>${app.company}</strong></td>
       <td>${app.role}</td>
-      <td>${scoreBadge(app.scoreRaw, app.score)}</td>
+      <td>${scoreBadge(app.score)}</td>
       <td>
-        <select data-number="${app.number}" class="status-select ${STATUS_COLORS[app.status] || 'status-grey'}">
+        <select class="status-select ${STATUS_COLORS[app.status] || 'status-grey'}" data-id="${app.id}">
           ${['Evaluated','Applied','Responded','Interview','Offer','Rejected','Discarded','SKIP']
-            .map((s) => `<option value="${s}" ${s === app.status ? 'selected' : ''}>${s}</option>`)
-            .join('')}
+            .map((s) => `<option value="${s}" ${s === app.status ? 'selected' : ''}>${s}</option>`).join('')}
         </select>
       </td>
       <td>${app.date}</td>
       <td>${app.hasPdf ? '<span class="pdf-yes">✅</span>' : '<span class="muted">—</span>'}</td>
       <td class="notes-cell">${app.notes || ''}</td>
-    </tr>
-  `).join('');
+    </tr>`).join('');
 
-  document.querySelectorAll('.status-select').forEach((select) => {
-    select.addEventListener('change', async (e) => {
-      const number = e.target.dataset.number;
-      await api(`/api/applications/${number}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: e.target.value }),
-      });
+  document.querySelectorAll('.status-select').forEach((sel) => {
+    sel.addEventListener('change', (e) => {
+      const all = lsGet(LS.applications, []);
+      const idx = all.findIndex((a) => a.id === e.target.dataset.id);
+      if (idx !== -1) { all[idx].status = e.target.value; lsSet(LS.applications, all); }
       e.target.className = `status-select ${STATUS_COLORS[e.target.value] || 'status-grey'}`;
-      await loadSummary();
+      renderOverview();
     });
   });
 }
 
-function filterApplications() {
-  const q = document.getElementById('app-search').value.trim().toLowerCase();
-  state.filteredApps = q
-    ? state.apps.filter((a) => `${a.company} ${a.role} ${a.status} ${a.notes}`.toLowerCase().includes(q))
-    : [...state.apps];
-  renderApplications();
-}
+// ── CV / Editor ───────────────────────────────────────────────────────────────
 
-// ── Data loading ──────────────────────────────────────────────────────────────
-
-async function loadSummary() {
-  const [summaryPayload, contextPayload] = await Promise.all([
-    api('/api/summary'),
-    api('/api/context'),
-  ]);
-  state.apps = summaryPayload.apps;
-  state.filteredApps = [...summaryPayload.apps];
-  state.summary = summaryPayload.summary;
-  state.context = contextPayload;
-  renderMetrics();
-  renderApplications();
-}
-
-async function loadFile(key) {
-  state.currentFile = key;
+function loadEditor(key) {
+  state.currentEditorKey = key;
   document.querySelectorAll('.mini-btn').forEach((b) => b.classList.toggle('active', b.dataset.file === key));
-  const payload = await api(`/api/files/${key}`);
-  document.getElementById('file-editor').value = payload.content;
+  const content = key === 'cv' ? (lsGet(LS.cv) || '') : JSON.stringify(lsGet(LS.profile, {}), null, 2);
+  document.getElementById('file-editor').value = content;
 }
 
-async function saveCurrentFile() {
+function saveEditor() {
   const content = document.getElementById('file-editor').value;
-  await api(`/api/files/${state.currentFile}`, {
-    method: 'PUT',
-    body: JSON.stringify({ content }),
-  });
+  if (state.currentEditorKey === 'cv') {
+    lsSet(LS.cv, content);
+  } else if (state.currentEditorKey === 'profile') {
+    try { lsSet(LS.profile, JSON.parse(content)); } catch { /* invalid JSON, ignore */ }
+  }
   document.getElementById('save-feedback').textContent = `Saved at ${new Date().toLocaleTimeString()}`;
 }
 
-async function loadReports() {
-  const payload = await api('/api/reports');
-  state.reports = payload.reports;
+// ── Reports ───────────────────────────────────────────────────────────────────
+
+function renderReports() {
+  const reports = lsGet(LS.reports, []);
   const list = document.getElementById('reports-list');
-  if (!payload.reports.length) {
-    list.innerHTML = `
-      <div class="empty-state">
-        <p class="empty-icon">📄</p>
-        <p class="empty-title">No reports yet</p>
-        <p class="muted">Evaluate a role to generate your first report.</p>
-      </div>`;
+  if (!reports.length) {
+    list.innerHTML = `<div class="empty-state"><p class="empty-icon">📄</p><p class="empty-title">No reports yet</p><p class="muted">Evaluate a role to generate your first report.</p></div>`;
     return;
   }
-  list.innerHTML = payload.reports.map((r) => `
-    <button class="report-item" data-report="${r.name}">
-      <strong>${r.company}</strong>
-      <div>${r.title}</div>
-      <div class="meta">${new Date(r.updatedAt).toLocaleString()}</div>
-    </button>
-  `).join('');
+  list.innerHTML = [...reports].reverse().map((r) => `
+    <button class="report-item" data-id="${r.id}">
+      <strong>${r.company || 'Report'}</strong>
+      <div>${r.title || ''}</div>
+      <div class="meta">${r.date}</div>
+    </button>`).join('');
+
   document.querySelectorAll('.report-item').forEach((btn) => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       document.querySelectorAll('.report-item').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
-      const payload = await api(`/api/report/${encodeURIComponent(btn.dataset.report)}`);
-      document.getElementById('report-preview').innerHTML = marked.parse(payload.content);
+      const all = lsGet(LS.reports, []);
+      const report = all.find((r) => r.id === btn.dataset.id);
+      if (report) document.getElementById('report-preview').innerHTML = marked.parse(report.content);
     });
   });
-}
-
-async function runChecks() {
-  const container = document.getElementById('checks-results');
-  container.innerHTML = '<p class="muted" style="padding:16px">Running checks…</p>';
-  const payload = await api('/api/checks/run', { method: 'POST' });
-  container.innerHTML = payload.results.map((r) => `
-    <article class="check-card ${r.ok ? 'ok' : 'fail'}">
-      <h4>${r.script} ${r.ok ? '✓' : '✗'}</h4>
-      <pre class="check-output">${r.output || 'No output'}</pre>
-    </article>
-  `).join('');
 }
 
 // ── Evaluate ──────────────────────────────────────────────────────────────────
@@ -353,7 +287,6 @@ async function runChecks() {
 async function runEvaluation() {
   const jdText = document.getElementById('eval-input').value.trim();
   if (!jdText) return;
-
   const btn = document.getElementById('eval-btn');
   const statusEl = document.getElementById('eval-status');
   const resultPanel = document.getElementById('eval-result-panel');
@@ -364,9 +297,10 @@ async function runEvaluation() {
   resultPanel.classList.add('hidden');
 
   try {
+    const cv = lsGet(LS.cv) || '';
     const payload = await api('/api/evaluate', {
       method: 'POST',
-      body: JSON.stringify({ jdText }),
+      body: JSON.stringify({ jdText, cv }),
     });
     state.evalResult = payload.result;
     document.getElementById('eval-result').innerHTML = marked.parse(payload.result);
@@ -380,90 +314,132 @@ async function runEvaluation() {
   }
 }
 
-async function saveEvalReport() {
+function saveEvalReport() {
   if (!state.evalResult) return;
+  const reports = lsGet(LS.reports, []);
+  const id = `r-${Date.now()}`;
+  const date = new Date().toLocaleDateString();
+  const firstLine = state.evalResult.split('\n').find((l) => l.trim()) || 'Report';
+  reports.push({ id, date, company: 'Evaluation', title: firstLine.slice(0, 60), content: state.evalResult });
+  lsSet(LS.reports, reports);
+  renderReports();
   const btn = document.getElementById('save-report-btn');
-  btn.textContent = 'Saving…';
-  btn.disabled = true;
-  try {
-    const payload = await api('/api/reports/save', {
-      method: 'POST',
-      body: JSON.stringify({ content: state.evalResult }),
-    });
-    btn.textContent = `Saved as ${payload.fileName}`;
-    await loadReports();
-  } catch (e) {
-    btn.textContent = 'Save failed';
-  } finally {
-    btn.disabled = false;
+  btn.textContent = 'Saved ✓';
+  setTimeout(() => { btn.textContent = 'Save to reports'; }, 2000);
+}
+
+// ── Export / Import ───────────────────────────────────────────────────────────
+
+function exportData() {
+  const data = {
+    profile: lsGet(LS.profile),
+    cv: lsGet(LS.cv),
+    applications: lsGet(LS.applications, []),
+    reports: lsGet(LS.reports, []),
+    exportedAt: new Date().toISOString(),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `career-ops-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+}
+
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.profile) lsSet(LS.profile, data.profile);
+      if (data.cv) lsSet(LS.cv, data.cv);
+      if (data.applications) lsSet(LS.applications, data.applications);
+      if (data.reports) lsSet(LS.reports, data.reports);
+      window.location.reload();
+    } catch {
+      alert('Invalid backup file.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ── Apply profile to UI ───────────────────────────────────────────────────────
+
+function applyProfile() {
+  const profile = lsGet(LS.profile, {});
+  if (profile.name) {
+    const first = profile.name.split(' ')[0];
+    document.getElementById('sidebar-title').textContent = `${first}'s Job Search OS`;
+    document.getElementById('hero-heading').textContent = `${first}'s search, under control.`;
+    document.title = `${first} · Career-Ops`;
+  }
+}
+
+function applyAiConfig() {
+  if (!state.aiConfig?.configured) {
+    document.getElementById('ai-badge').textContent = 'AI not configured';
+    document.getElementById('eval-ai-label').textContent = 'AI not configured on server';
+    document.getElementById('eval-btn').disabled = true;
+    document.getElementById('eval-btn').title = 'Set AI_PROVIDER and AI_API_KEY on the server';
+  } else {
+    const label = `${state.aiConfig.provider}${state.aiConfig.model ? ' / ' + state.aiConfig.model : ''}`;
+    document.getElementById('ai-badge').textContent = label;
+    document.getElementById('eval-ai-label').textContent = label;
   }
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
-async function applySetupStatus() {
-  const status = await api('/api/setup-status');
-  state.setupStatus = status;
-
-  if (status.name) {
-    const first = status.name.split(' ')[0];
-    document.getElementById('sidebar-title').textContent = `${first}'s Job Search OS`;
-    document.getElementById('hero-heading').textContent = `${first}'s search, under control.`;
-    document.title = `${first} · Career-Ops`;
-  }
-
-  if (status.provider && status.model) {
-    const badge = `${status.provider} · ${status.model}`;
-    document.getElementById('ai-badge').textContent = badge;
-    document.getElementById('eval-ai-label').textContent = badge;
-  }
-}
-
 function boot() {
-  // Nav
-  document.querySelectorAll('.nav-btn').forEach((b) => {
-    b.addEventListener('click', () => setView(b.dataset.view));
-  });
+  applyProfile();
 
-  // Mobile hamburger
+  api('/api/ai-config').then((cfg) => {
+    state.aiConfig = cfg;
+    applyAiConfig();
+    renderOverview();
+  }).catch(() => {});
+
+  document.querySelectorAll('.nav-btn').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
   document.getElementById('hamburger').addEventListener('click', openSidebar);
   document.getElementById('sidebar-backdrop').addEventListener('click', closeSidebar);
 
-  // Editor tabs
-  document.querySelectorAll('.mini-btn').forEach((b) => {
-    b.addEventListener('click', () => loadFile(b.dataset.file));
-  });
+  document.querySelectorAll('.mini-btn').forEach((b) => b.addEventListener('click', () => loadEditor(b.dataset.file)));
+  document.getElementById('save-file').addEventListener('click', saveEditor);
+  document.getElementById('app-search').addEventListener('input', (e) => renderApplications(e.target.value.trim().toLowerCase()));
 
-  document.getElementById('app-search').addEventListener('input', filterApplications);
-  document.getElementById('save-file').addEventListener('click', saveCurrentFile);
-  document.getElementById('run-checks').addEventListener('click', runChecks);
   document.getElementById('eval-btn').addEventListener('click', runEvaluation);
   document.getElementById('save-report-btn').addEventListener('click', saveEvalReport);
-  document.getElementById('refresh-all').addEventListener('click', async () => {
-    await Promise.all([loadSummary(), loadReports(), loadFile(state.currentFile), applySetupStatus()]);
+
+  document.getElementById('export-btn').addEventListener('click', exportData);
+  document.getElementById('import-input').addEventListener('change', (e) => {
+    if (e.target.files[0]) importData(e.target.files[0]);
+  });
+  document.getElementById('import-btn').addEventListener('click', () => {
+    document.getElementById('import-input').click();
   });
 
-  Promise.all([applySetupStatus(), loadSummary(), loadReports(), loadFile('cv')]).catch((err) => {
-    document.getElementById('app').innerHTML =
-      `<main style="padding:24px"><h1>Career-Ops failed to load</h1><p>${err.message}</p></main>`;
+  document.getElementById('refresh-all').addEventListener('click', () => {
+    renderOverview();
+    renderApplications();
+    renderReports();
+    loadEditor(state.currentEditorKey);
   });
+
+  renderOverview();
+  renderApplications();
+  renderReports();
+  loadEditor('cv');
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-(async () => {
-  try {
-    const status = await api('/api/setup-status');
-    if (!status.complete) {
-      document.getElementById('onboarding').classList.remove('hidden');
-      initOnboarding();
-      showStep(1);
-    } else {
-      document.getElementById('app').style.display = '';
-      boot();
-    }
-  } catch (err) {
-    document.body.innerHTML =
-      `<main style="padding:24px;font-family:sans-serif"><h1>Career-Ops GUI failed to load</h1><p>${err.message}</p></main>`;
+(function init() {
+  const profile = lsGet(LS.profile);
+  if (!profile || !profile.name) {
+    document.getElementById('onboarding').classList.remove('hidden');
+    initOnboarding();
+    showStep(1);
+  } else {
+    document.getElementById('app').style.display = '';
+    boot();
   }
 })();

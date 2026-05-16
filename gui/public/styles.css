@@ -61,7 +61,10 @@ button, input, textarea, select { font: inherit; }
 }
 
 .brand h1 { margin: 8px 0 4px; font-size: 1.15rem; }
-.sidebar-footer { margin-top: auto; }
+.sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+
+.backup-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.small-btn { padding: 7px 12px; font-size: 0.8rem; }
 
 .ai-badge {
   display: inline-block;

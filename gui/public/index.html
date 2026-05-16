@@ -24,8 +24,6 @@
           <div class="step" data-step="2">2</div>
           <div class="step-line"></div>
           <div class="step" data-step="3">3</div>
-          <div class="step-line"></div>
-          <div class="step" data-step="4">4</div>
         </div>
 
         <!-- Step 1: About you -->
@@ -55,51 +53,19 @@
           </div>
         </div>
 
-        <!-- Step 2: AI provider -->
+        <!-- Step 2: CV -->
         <div class="step-content" data-step="2">
-          <h2>Your AI model</h2>
-          <p class="muted step-desc">Pick the provider you have API access to. Your key is stored only on this server — never sent anywhere else.</p>
-          <div class="field-grid">
-            <label class="field full">
-              <span>Provider</span>
-              <select id="ob-provider">
-                <option value="anthropic">Anthropic Claude</option>
-                <option value="openai">OpenAI (ChatGPT)</option>
-                <option value="deepseek">Deepseek</option>
-                <option value="gemini">Google Gemini</option>
-                <option value="qwen">Qwen (Alibaba)</option>
-                <option value="kimi">Kimi (Moonshot)</option>
-                <option value="custom">Other (custom URL)</option>
-              </select>
-            </label>
-            <label class="field full">
-              <span>API Key <em>*</em></span>
-              <input id="ob-apikey" type="password" placeholder="sk-..." autocomplete="off" />
-            </label>
-            <label class="field">
-              <span>Model</span>
-              <input id="ob-model" type="text" placeholder="claude-sonnet-4-6" />
-            </label>
-            <label class="field" id="ob-baseurl-field" style="display:none">
-              <span>Base URL <em>*</em></span>
-              <input id="ob-baseurl" type="url" placeholder="https://api.example.com/v1" />
-            </label>
-          </div>
-        </div>
-
-        <!-- Step 3: CV -->
-        <div class="step-content" data-step="3">
           <h2>Your CV / Resume</h2>
           <p class="muted step-desc">Paste your CV below. Markdown is ideal, but plain text works too. The AI reads this when evaluating each job.</p>
           <textarea id="ob-cv" placeholder="# Ada Lovelace&#10;&#10;## Experience&#10;..."></textarea>
         </div>
 
-        <!-- Step 4: Done -->
-        <div class="step-content" data-step="4">
+        <!-- Step 3: Done -->
+        <div class="step-content" data-step="3">
           <div class="done-screen">
             <div class="done-icon">✦</div>
             <h2 id="done-heading">You're all set!</h2>
-            <p class="muted" id="done-body">Paste any job URL or description in the Evaluate tab to get your first analysis.</p>
+            <p class="muted">Paste any job URL or description in the Evaluate tab to get your first analysis.</p>
             <button id="ob-finish" class="primary-btn large">Open my dashboard →</button>
           </div>
         </div>
@@ -115,7 +81,6 @@
     <!-- ── Main app ────────────────────────────────────────────────────── -->
     <div class="shell" id="app" style="display:none">
 
-      <!-- Hamburger (mobile only) -->
       <button id="hamburger" class="hamburger" aria-label="Open menu">&#9776;</button>
       <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
 
@@ -129,12 +94,16 @@
           <button class="nav-btn active" data-view="overview">Overview</button>
           <button class="nav-btn" data-view="evaluate">Evaluate a Role</button>
           <button class="nav-btn" data-view="applications">Applications</button>
-          <button class="nav-btn" data-view="editor">Source Files</button>
+          <button class="nav-btn" data-view="editor">CV &amp; Profile</button>
           <button class="nav-btn" data-view="reports">Reports</button>
-          <button class="nav-btn" data-view="checks">Checks</button>
         </nav>
         <div class="sidebar-footer">
           <p id="ai-badge" class="ai-badge muted small"></p>
+          <div class="backup-actions">
+            <button id="export-btn" class="ghost-btn small-btn">Export backup</button>
+            <button id="import-btn" class="ghost-btn small-btn">Import backup</button>
+            <input id="import-input" type="file" accept=".json" style="display:none" />
+          </div>
         </div>
       </aside>
 
@@ -156,8 +125,8 @@
               <div id="status-breakdown" class="status-breakdown"></div>
             </article>
             <article class="panel">
-              <div class="panel-head"><h3>What this GUI controls</h3></div>
-              <div id="context-files" class="chips"></div>
+              <div class="panel-head"><h3>Your setup</h3></div>
+              <div id="context-info" class="chips"></div>
             </article>
           </div>
         </section>
@@ -169,7 +138,7 @@
               <h3>Evaluate a job</h3>
               <span id="eval-ai-label" class="ai-badge muted small"></span>
             </div>
-            <p class="muted">Paste a job URL or the full job description. The AI will evaluate it against your CV and profile.</p>
+            <p class="muted">Paste a job URL or the full job description. The AI evaluates it against your CV and profile.</p>
             <textarea id="eval-input" placeholder="https://jobs.example.com/senior-pm&#10;&#10;— or paste the full job description here —"></textarea>
             <div class="eval-actions">
               <button id="eval-btn" class="primary-btn large">Evaluate this role</button>
@@ -196,14 +165,8 @@
               <table>
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>Company</th>
-                    <th>Role</th>
-                    <th>Score</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                    <th>PDF</th>
-                    <th>Notes</th>
+                    <th>#</th><th>Company</th><th>Role</th><th>Score</th>
+                    <th>Status</th><th>Date</th><th>PDF</th><th>Notes</th>
                   </tr>
                 </thead>
                 <tbody id="applications-body"></tbody>
@@ -221,18 +184,16 @@
         <section id="view-editor" class="view">
           <div class="panel">
             <div class="panel-head stack-mobile">
-              <h3>Source-of-truth editor</h3>
+              <h3>CV &amp; Profile editor</h3>
               <div class="editor-tabs">
-                <button class="mini-btn active" data-file="cv">Resume</button>
-                <button class="mini-btn" data-file="profile">Profile</button>
-                <button class="mini-btn" data-file="portals">Scanner</button>
-                <button class="mini-btn" data-file="pipeline">Pipeline inbox</button>
+                <button class="mini-btn active" data-file="cv">Resume (CV)</button>
+                <button class="mini-btn" data-file="profile">Profile (JSON)</button>
               </div>
             </div>
             <textarea id="file-editor" spellcheck="false"></textarea>
             <div class="actions">
               <span id="save-feedback" class="muted"></span>
-              <button id="save-file" class="primary-btn">Save current file</button>
+              <button id="save-file" class="primary-btn">Save</button>
             </div>
           </div>
         </section>
@@ -242,13 +203,7 @@
           <div class="grid reports-grid">
             <article class="panel">
               <div class="panel-head"><h3>Saved reports</h3></div>
-              <div id="reports-list" class="report-list">
-                <div class="empty-state">
-                  <p class="empty-icon">📄</p>
-                  <p class="empty-title">No reports yet</p>
-                  <p class="muted">Evaluate a role to generate your first report.</p>
-                </div>
-              </div>
+              <div id="reports-list" class="report-list"></div>
             </article>
             <article class="panel">
               <div class="panel-head"><h3>Preview</h3></div>
@@ -256,23 +211,6 @@
                 <p class="muted">Select a report to preview it here.</p>
               </div>
             </article>
-          </div>
-        </section>
-
-        <!-- Checks -->
-        <section id="view-checks" class="view">
-          <div class="panel">
-            <div class="panel-head stack-mobile">
-              <h3>Repo health checks</h3>
-              <button id="run-checks" class="primary-btn">Run checks</button>
-            </div>
-            <div id="checks-results" class="checks-results">
-              <div class="empty-state">
-                <p class="empty-icon">🔍</p>
-                <p class="empty-title">No checks run yet</p>
-                <p class="muted">Click "Run checks" to validate your pipeline integrity.</p>
-              </div>
-            </div>
           </div>
         </section>
       </main>
