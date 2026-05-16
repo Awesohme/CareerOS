@@ -1,7 +1,8 @@
 import { evaluate } from './ai.mjs';
 
 const FETCH_TIMEOUT_MS = 10_000;
-const AI_CONCURRENCY = 3;
+const AI_CONCURRENCY = 1;       // 1 at a time to stay within Groq free tier TPM limits
+const HTML_CHUNK_SIZE = 5_000;  // ~1,500 tokens per request, well within 12k TPM
 
 function withTimeout(promise, ms) {
   return Promise.race([
@@ -82,7 +83,7 @@ export async function scanWithAI(companies, filters) {
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const html = await res.text();
-        const trimmed = html.slice(0, 15_000);
+        const trimmed = html.slice(0, HTML_CHUNK_SIZE);
 
         const systemPrompt = `You are a job listing extractor. Extract all job listings from the HTML below.
 Return ONLY a valid JSON array with this exact shape (no markdown, no explanation):
