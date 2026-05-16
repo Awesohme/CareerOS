@@ -1,0 +1,98 @@
+# Career-Ops Portal Scanner Configuration
+# Focused on senior B2B product roles with an AI-native secondary angle.
+
+title_filter:
+  positive:
+    - "Product Manager"
+    - "Senior Product Manager"
+    - "Product Lead"
+    - "Lead Product Manager"
+    - "Group Product Manager"
+    - "Growth Product Manager"
+    - "Product Owner"
+    - "Platform Product Manager"
+    - "Product Operations"
+    - "AI Product Manager"
+  negative:
+    - "Intern"
+    - "Associate"
+    - "Junior"
+    - "Designer"
+    - "Data Scientist"
+    - "Software Engineer"
+    - "Sales"
+    - "Customer Success"
+  seniority_boost:
+    - "Senior"
+    - "Lead"
+    - "Principal"
+    - "Head"
+    - "Group"
+
+search_queries:
+  - name: Greenhouse -- Senior Product
+    query: 'site:boards.greenhouse.io OR site:job-boards.greenhouse.io "Senior Product Manager" OR "Product Lead" remote'
+    enabled: true
+  - name: Ashby -- Product and Growth
+    query: 'site:jobs.ashbyhq.com "Product Manager" OR "Growth Product Manager" remote'
+    enabled: true
+  - name: Lever -- Product
+    query: 'site:jobs.lever.co "Senior Product Manager" OR "Platform Product Manager" remote'
+    enabled: true
+  - name: B2B SaaS Product -- Broad
+    query: '"Senior Product Manager" "B2B SaaS" remote site:jobs.ashbyhq.com OR site:boards.greenhouse.io OR site:jobs.lever.co'
+    enabled: true
+  - name: AI-Native Product -- Secondary
+    query: '"AI Product Manager" OR "Product Manager, AI" remote site:jobs.ashbyhq.com OR site:boards.greenhouse.io OR site:jobs.lever.co'
+    enabled: true
+
+tracked_companies:
+  - name: Zapier
+    careers_url: https://jobs.ashbyhq.com/zapier
+    scan_method: websearch
+    scan_query: 'site:jobs.ashbyhq.com/zapier "Product"'
+    enabled: true
+  - name: Airtable
+    careers_url: https://www.airtable.com/careers
+    scan_method: websearch
+    scan_query: 'site:airtable.com/careers "Product Manager"'
+    enabled: true
+  - name: Retool
+    careers_url: https://retool.com/careers
+    scan_method: websearch
+    scan_query: 'site:retool.com/careers "Product Manager" OR "Product Lead"'
+    enabled: true
+  - name: Notion
+    careers_url: https://www.notion.so/careers
+    scan_method: websearch
+    scan_query: 'site:notion.so/careers "Product"'
+    enabled: true
+  - name: Miro
+    careers_url: https://miro.com/careers/open-positions/
+    scan_method: websearch
+    scan_query: 'site:miro.com/careers/open-positions "Product Manager"'
+    enabled: true
+  - name: Figma
+    careers_url: https://www.figma.com/careers/
+    scan_method: websearch
+    scan_query: 'site:figma.com/careers "Product Manager"'
+    enabled: true
+  - name: GitLab
+    careers_url: https://about.gitlab.com/jobs/
+    scan_method: websearch
+    scan_query: 'site:about.gitlab.com/jobs "Product Manager"'
+    enabled: true
+  - name: HubSpot
+    careers_url: https://www.hubspot.com/careers/jobs
+    scan_method: websearch
+    scan_query: 'site:hubspot.com/careers/jobs "Product Manager"'
+    enabled: true
+  - name: Intercom
+    careers_url: https://www.intercom.com/careers
+    scan_method: websearch
+    scan_query: 'site:intercom.com/careers "Product Manager"'
+    enabled: true
+  - name: Vercel
+    careers_url: https://job-boards.greenhouse.io/vercel
+    api: https://boards-api.greenhouse.io/v1/boards/vercel/jobs
+    enabled: true

@@ -10,6 +10,16 @@ function withTimeout(promise, ms) {
   ]);
 }
 
+function dedup(jobs) {
+  const seen = new Set();
+  return jobs.filter((j) => {
+    const key = `${j.company}||${j.title}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function applyTitleFilters(jobs, filters = {}) {
   const positive = (filters.positive || []).map((k) => k.toLowerCase());
   const negative = (filters.negative || []).map((k) => k.toLowerCase());
@@ -35,7 +45,7 @@ export async function scanGreenhouse(companies, filters) {
         url: j.absolute_url || j.url,
         location: (j.location?.name || j.offices?.[0]?.name || 'Remote'),
       }));
-      return { company: company.name, jobs: applyTitleFilters(jobs, filters) };
+      return { company: company.name, jobs: dedup(applyTitleFilters(jobs, filters)) };
     })
   );
 
